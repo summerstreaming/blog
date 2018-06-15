@@ -6,7 +6,7 @@ target/
 .idea/
 *.iml
 *.lst
-#.gitignore
+.gitignore
 .vscode/
 
 # Created by https://www.gitignore.io/api/java,eclipse,intellij,sublimetext,vim,emacs,windows,osx,linux,maven,gradle,vagrant
