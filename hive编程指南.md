@@ -1,16 +1,193 @@
 # 《hive编程指南》读书笔记
-简介：本书是一本hive的编程指南，旨在介绍如何使用hive的sql方法进行汇总、查询和分析存储在hadoop分布式文件系统上的大数据集合；  
+简介：本书是一本hive的编程指南，旨在介绍如何使用hive的sql方法进行汇总、查询和分析存储在hadoop分布式文件系统上的大数据集合；总体上讲本书的阅读难度不高，主要是科普在client下的hive操作和hive的基本概念；  
 
 ## 第一章 基础知识  
 介绍了Hadoop和MapReduce生态，给了一个经典的word count的例子；重点表达的是如果使用传统的MR来写需要较多代码实现，但是使用**hive可以提高开发效率**，开发者可以**聚焦业务功能**实现上；  
 
 ## 第二章 基础操作  
-主要介绍了hive相关的环境搭建；    
+主要介绍了hive相关的环境搭建；不仅包括hive，也连带的介绍了hadoop的环境安装；      
 
-```mermaid
-graph LR;
-　　A-->|A指向B|B;
-　　B---|B与C相连|C;
-```   
+## 第三章 数据类型和文件格式  
+* 基本数据类型：  
+tinyint 1b  
+smallint 2b  
+int 4b  
+bigint 8b  
+boolean true,false  
+float  
+double  
+string  
+timestamp  
+binary 字节数组  
+* 集合数据类型：  
+struct：类似c中的struct  
+map：普通的key-value集合  
+array：普通的数组集合  
+  
+行内字段之间的分隔符是可以指定的(hive自己一般指定不可见字符):  
+```sql
+row format delimited
+fields terminated by ','
+collection terminated by '\t'
+map keys terminated by ':'
+lines terminated by '\n'  -- 目前行分隔符只支持回车
+stored as textfile;
+```
+传统数据库都是**写时模式**；hive是**读时模式**，但是load data的时候会对数据的格式进行检查，比如定义的textfile格式，就不允许挂接sequencefile的文件；  
+读时模式：在查询时对表模式进行验证；  
+写时模式：在数据写入的时候就对表模式进行验证；  
+
+## 第四章 hiveQL：数据定义  
+本章主要讲了表结构的各种管理操作；
+hive的表从表数据文件管理上区分为管理表(内表)和外表；  
+外表的主要特征：方便在hive外共享数据，删除表不会影响表数据文件(内表会同时删除文件),
+
+* 创建表：
+```sql
+create table if not exists management_table( -- 建的是管理表
+    id bigint comment 'just id',
+    name string comment 'full name for id'
+) comment 'table comment'
+tblproperties('A'='a','B'='b') -- 表属性，hive会自动添加2个表属性，last_modify_by和last_modify_time,最后修改人和最后修改时间
+location '/user/hive/warehouse/mydb.db/management_table';
+
+
+create table if not exists management_table2 like management_table; -- copy表结构但是不会copy数据
+create external table if not exists management_table2 like management_table
+location 'hdfs://user/mydata/ext_table/management_table2'; -- copy表结构生成一个外表，但是不会copy数据
+
+create external table if not exists management_table( -- 建的是外表，用关键字 external 来标识
+    id bigint comment 'just id',
+    name string comment 'full name for id'
+) comment 'table comment'
+partitioned by ('dt','hr') -- 分区表的分区字段，hive会根据分区字段建文件夹，数据文件中本身不需要有这个字段
+row format delimited fields terminated by '\t'
+lines terminated by '\n'
+stored as textfile
+location 'hdfs://user/mydata/management_table';
+```
+
+* 查看表结构或者分区信息:
+```sql
+describe management_table; -- 查看表结构信息
+describe extended management_table; -- 查看详细的表结构信息，区别在包括了表属性信息
+
+show partitions management_table; -- 查看表的所有分区
+show partitions management_table partition(dt='20180618'); -- 只查看一部分分区的信息，此处相当于查看所有dt相同的hr分区信息，也可以加上hr的分区限制，只查看一个分区的信息，用逗号分割；
+
+```
+
+* 查询相关:  
+```sql
+set hive.mapred.mode=strict; --查询hive的sql中使用如下语句可以强制必须指定分区才能进行查询；
+-- 报错信息：Error in semantic analysis: No partition predicate found for table "table_name"
+
+set hive.mapred.mode=nonstrict; -- 取消强制指定分区查询
+
+```
+
+* load数据相关:
+```sql
+load data local inpath '/usr/mydata/data_dir' -- local定义的是本地数据文件目录，从本地load到hive中，
+into table table_name
+partition(dt='',hr=''); -- 确定数据load到一个分区中
+
+-- 外部分区表load数据
+alter table table_name add if not exists partition(dt='',hr='')
+location 'hdfs://master_server/mydata/data_dir';
+
+```
+
+* 修改表结构、分区：
+```sql
+-- 外部分区表load数据
+alter table table_name 
+add if not exists partition(dt='20180618',hr='09') location 'hdfs://master_server/mydata/data_dir1'
+add if not exists partition(dt='20180618',hr='10') location 'hdfs://master_server/mydata/data_dir2';
+
+-- 外部分区表修改分区数据路径
+alter table table_name partition(dt='',hr='')
+set location 'hdfs://master_server/mydata/data_dir';
+
+alter table table_name drop if exists partition(dt='',hr='');
+
+-- 修改表名
+alter table management_table rename to management_table2; -- 修改表名
+
+-- 修改列信息
+alter table table_name 
+change column name new_name string comment '' after id;
+
+-- 增加列信息, 新增加的字段会在已有字段之后，分区字段之前
+alter table table_name add columns(
+birth int comment 'my birth year',
+high int comment 'my length'
+);
+
+-- 替换新列，删除之前的所有列，替换成这些新的列，不包括分区字段
+alter table table_name replace columns(
+id int comment 'my id',
+name string comment 'my name',
+birth int comment 'my birth year',
+high int comment 'my length'
+);
+
+--修改表结构，让数据分桶存储
+alter table table_name 
+clustered by (id) -- 可以有多个字段，逗号分割 
+sorted by(id) -- 可选子句
+into 8 buckets;
+```
+
+## 第五章 HiveQL:数据操作
+本章主要讲了hive表的相关数据操作，比如load数据到表中和从表中抽取数据到文件系统中；
+
+* load数据到hive表中  
+```sql
+-- 通过load data来添加数据
+-- hive要求表文件在同一个集群，如果有多个hdfs，跨hdfs系统的时候只能用local方式；
+load data local inpath '/usr/mydata/data_dir/table_name' -- local表示数据是在本地文件系统，数据会拷贝到目标路径，如果没有local则是转移集群上的文件到目标位置
+overwrite into table table_name -- overwrite表示把原来的文件删除掉，加载新的数据，如果没有overwrite则是增量添加文件，重名文件会改名
+partition(dt='',hr='');
+
+-- 通过查询来添加数据
+insert overwrite table table_name
+partition(dt='',hr='')
+select id,name from table_ohter
+where id < 1000000;
+
+-- 一次扫描写入表的多个分区数据
+from table_other
+insert overwrite table table_name partition(dt='20180618',hr='11')
+  select id,name where table_other.id < 1000000
+insert overwrite table table_name partition(dt='20180618',hr='12')
+  select id,name where table_other.id between 1000000 and 2000000
+insert overwrite table table_name partition(dt='20180618',hr='13')
+  select id,name where table_other.id between 2000000 and 3000000;
+
+-- 动态分区插入(比上面的方法写起来更简洁)
+insert overwrite table table_name
+partition(dt,hr)
+select id,name,dt,hr from table_other where id<1000000; -- select 中的dt和hr不一定需要和partition中的字段名一样，是根据select中最后的2列来确定分区字段的，而不是根据字段命名来匹配的；
+
+-- 混合使用动态和静态分区
+insert overwrite table table_name
+partition(dt='20180618',hr) -- 静态分区必须出现在动态分区之前
+select id,name,dt,hr from table_other where dt='20180618' and id<1000000;
+
+-- 动态分区默认没有开启，需要设置开启;同时还有一些其他设置，不再列举
+set hive.exec.dynamic.partition=true;
+
+-- 查询语句中创建表并加载数据(只能用于管理表，不适用于外表)
+create table table_name 
+as select id,name from table_other where id<1000000;
+
+
+
+```
+
+
+
+
 
 
