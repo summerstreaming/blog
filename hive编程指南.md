@@ -140,7 +140,7 @@ into 8 buckets;
 ```
 
 ## 第五章 HiveQL:数据操作
-本章主要讲了hive表的相关数据操作，比如load数据到表中和从表中抽取数据到文件系统中；
+本章主要讲了hive表的相关数据导入和导出操作，比如load数据到表中和从表中抽取数据到文件系统中；
 
 * load数据到hive表中  
 ```sql
@@ -181,13 +181,86 @@ set hive.exec.dynamic.partition=true;
 -- 查询语句中创建表并加载数据(只能用于管理表，不适用于外表)
 create table table_name 
 as select id,name from table_other where id<1000000;
-
-
-
 ```
 
+* 导出数据  
+对于需要导出的数据，可以直接copy文件来用，前提是文件格式符合需要；
+```sql
+-- sql导出数据到本地路径
+insert overwrite local directory '/usr/mydata/data_dir'
+    select id, name from table_name where dt='20180618';
 
+-- sql导出数据到本地多个路径，和多分区导入一样
+from table_name
+insert overwrite directory '/usr/mydata/data_dir_14'
+    select id,name where dt='20180618' and hr='13'
+insert overwrite directory '/usr/mydata/data_dir_14'
+    select id,name where dt='20180618' and hr='14';
+```
 
+## 第六章 HiveQL:查询
+本章主要关注与hiveql和普通sql的差异，包括语法和特性，以及对性能造成的影响；  
 
+* 集合数据查询出来的是java的json格式的数据，例如：["apple","orange","peach"];  
+* map数据查询出来的是java的json格式的数据，例如：{"apple":"red", "orange":"yellow", "peach":"green"};  
+* struct结构的数据和map查询出来的数据一样;  
 
+展开各种数据集合的方法：
+* 集合：array_fruit[0] : apple  
+* map: map_fruit["apple"] : red     
+* struct: struct_fruit.apple : red  
+
+各种列值计算：  
+* 包括算术运算和按位运算；  
+* 各种运算函数，内置函数包括round、floor、ceil、rand，还有各种数学计算函数；  
+* 各种聚合函数，包括sum、avg、count、min、max等；  
+* 各种表生成函数，与聚合函数相反，是把一列扩展成多列或者多行；explode(field_name) as sub_field;array或者map的一列扩展成多行，
+
+避免mapred的hiveql，也就是 -- 本地模式：
+```sql
+set hive.exec.mode.local.auto=true; -- 设置后hive会尝试对其他sql也使用本地模式；
+select * from table_name;
+select * from table_name where dt='' and hr='' limit 10; -- where只限制分区字段，是否y有limit限制都可以
+```
+
+* group by 语句  
+group by 语句通常和 聚合函数一起使用，按照一个或者多个列对数据进行分组，然后再对每个组做聚合操作；  
+* having 语句  
+having 语句主要用来对group by 语句产生的列做条件过滤；如果不用having，也可以使用子查询完成同样功能；  
+* join 语句
+大多数情况下，hive会为每个join操作启动一个MapReduce task(如果多个join的on条件一样则可以自动优化节省MR task)，并且总是从左到右执行，这就要求大家尽量**用小表join大表来提升性能**，另外hive的join连接条件on中只支持等值连接(tb_a.a=tb_b.b)，多个连接条件中间只支持and，不支持or；  
+join语句主要分为  
+    * inner join :  
+    * left outer join :  
+    * right outer join :   
+    * full outer join :  
+    * left semi join :   
+    * map side join: 需要设置 hive.auto.convert.join=true;(默认为false)；当左表很小的时候，自动的在map端执行连接操作，可以省掉reduce过程；  
+* order by 和 sort by  
+order by 是全局排序，sort by 是单个reduce内排序；  
+* distribute by  
+控制map的输出到reduce的过程中是如何划分的；通常不需要使用，但是如果使用了streaming和某些udaf的时候需要考虑这个；  
+* 类型转换  
+这个通常是自动向较大范围的字段类型靠齐；强转语法: cast(id as bigint);  
+* 抽样查询  
+对于太大的结果集，有时候只需要一个有代表性的抽样结果集，而不是完整的结果集；
+```sql
+-- 分母表示数据分桶的个数，分子表示选择的桶的个数
+select id from table_name tablesample(bucket 3 out of 10 on rand()) s; -- rand抽样是随机的
+select id from table_name tablesample(bucket 3 out of 10 on id) s; -- 指定抽样结果就是固定的
+
+-- 基于行的按百分比抽样
+select id from table_name tablesample(0.1 percent) s;
+```
+* union all  
+用于多表的数据合并，其实也可以用于同一表的数据合并；每个子查询需要有相同的列返回，而且字段类型必须一致；
+
+## 第七章 HiveQL：视图
+视图可以允许保存一个查询，并可以向表一样对这个查询做操作；这 **是一个逻辑结构，并不会保存数据**，也就是说hive **不支持物化视图**；  
+视图的作用主要是降低查询复杂度；用的不多，也不展开讲了；  
+
+## 第八章 HiveQL: 索引  
+hive支持有限的索引功能，hive中没有主键的概念，但是可以通过在一些字段上建立索引来加快一些操作；一张表的索引数据是单独存储在另外的一张表中的(**索引独立存储**)；  
+
+## 第九章 模式设计
 
