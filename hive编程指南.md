@@ -264,10 +264,37 @@ hive支持有限的索引功能，hive中没有主键的概念，但是可以通
 
 ## 第九章 模式设计
 本章主要介绍设计hive表的过程中，哪些模式是应该使用的，哪些模式是应该避免使用的；  
-* 按天划分表：这种正确的打开方式应该是做分区表，按天分区；
-* 关于分区：要适度分区，太多分区会导致大量的hadoop小文件和小文件夹；这样MR的启动初始化开销会增大
+* 按天划分表：这种正确的打开方式应该是做分区表，按天分区；  
+* 关于分区：要适度分区，太多分区会导致大量的hadoop小文件和小文件夹；这样MR的启动初始化开销会增大；  
+* 尽量保证数据有唯一键和标准化，可以充分使用array，map和struct来实现；没有唯一键时join操作应该尽量避免；  
+* 同一份数据的多种处理同时处理   
+```sql
+-- from table 这种语句可以保证后面的执行只对table_name表扫描一次，同时做后面的多种执行
+from table_name 
+    insert into table_new1 overwrite select a,b,c where dt='' 
+    insert into table_new2 overwrite select a,b,c where dt='' ;
+```
+* 对于每个表的分区；定期每天跑的中间数据尽量对每天的中间结果根据天分区，这样可以避免数据出现跨天覆盖的错误；(需要额外管理中间表分区的数据删除)  
+* 如果一个表的一个分区数据量太大，第二个分区又太细，可以采用分桶来存储数据；  
+```sql
+create table table_name(
+    id int,
+    name string
+)
+partitioned by(dt)
+clustered by (hash_code) into 32 buckets; -- 根据hash_code分为32个桶
 
+-- 分桶的表数据需要正确填充
+-- method1,设置强制bucketing，目的是让reduce个数和bucket个数一致
+set hive.enforce.bucketing=true;
 
+-- method2, 强制设置reduce个数和bucket个数一致，然后在insert语句中的 select 部分加 clustered by语句
+set hive.mapred.tasks=32
+insert overwrite table table_name partition(dt)
+    select id,name,dt,hash_code from table_other clustered by hash_code;
+```
+* 为表加列：hive读取数据的时候根据schema读取的，少的列统一为null，多出的列会忽略掉；加列直接 alter table add column 加到末尾即可，不能加在原字段的中间；
+* 尽量使用数据压缩；一般MapReduce是IO密集的，压缩可以减少IO，增加的是CPU使用率，整体性能无影响；
 
 
 
