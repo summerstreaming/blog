@@ -293,9 +293,30 @@ set hive.mapred.tasks=32
 insert overwrite table table_name partition(dt)
     select id,name,dt,hash_code from table_other clustered by hash_code;
 ```
-* 为表加列：hive读取数据的时候根据schema读取的，少的列统一为null，多出的列会忽略掉；加列直接 alter table add column 加到末尾即可，不能加在原字段的中间；
-* 尽量使用数据压缩；一般MapReduce是IO密集的，压缩可以减少IO，增加的是CPU使用率，整体性能无影响；
+* 为表加列：hive读取数据的时候根据schema读取的，少的列统一为null，多出的列会忽略掉；加列直接 alter table add column 加到末尾即可，不能加在原字段的中间；  
+* 尽量使用数据压缩；一般MapReduce是IO密集的，压缩可以减少IO，增加的是CPU使用率，整体性能无影响；  
 
+## 第十章 调优
+本周主要介绍一些hive处理sql语句的理论知识，让我们能更高效的使用hive；    
+* 学会使用 explain 语句；explain 可以帮助我们了解hive是怎么把sql转化成MR的；主要关注几个stage，stage的相互依赖，每个stage里面的扫描行数，过滤条件是否可以更早执行；  
+* 限制优化，通常使用limit的时候，仍然会执行整个计算，可以通过 set hive.limit.optimize.enable=true来把扫描数据变成抽样数据，加快性能；  
+* join优化，主要思想是小表执行 map-side join；  
+* 本地模式(不太有用，平时都是集群mr运行，不会使用本地模式)  
+* 并行执行, set hive.exec.parallel=true; 把没有依赖的多个stage并行执行；  
+* 严格模式，强制限制查询中必须指定分区，避免全局范围内的数据扫描；  
+* 调整MR的个数  
+* jvm重用，减少每个MR任务的init过程启动JVM的消耗；  
+* 索引  
+* 动态分区调整，就是一次扫描写入多个分区(前面有介绍)；  
+
+## 第十一章 文件压缩格式  
+本章介绍了文件的压缩格式；具体介绍略；  
+
+## 第十二章 开发
+本章简单探讨了hive源码，以及开发工具包；具体介绍略；
+
+## 第十三章 函数
+本章介绍了用户自定义UDF的最佳实践；
 
 
 
