@@ -316,7 +316,43 @@ insert overwrite table table_name partition(dt)
 本章简单探讨了hive源码，以及开发工具包；具体介绍略；
 
 ## 第十三章 函数
-本章介绍了用户自定义UDF的最佳实践；
+本章介绍了用户自定义UDF的最佳实践；  
+
+和关键字一样，**函数名也是保留的字符串**；  
+udf除了可以返回字符串外，也可以返回复杂的数据结构，map、struct、array；  
+
+* 聚合函数：所有的聚合函数统称为UDAF；常用的有sum、avg、max、min；  
+* 表生成函数：统称为UDTF；常用的就是explode；这个函数的输入可以是array或者map，输出是单列，如果需要join其他字段，需要使用lateral view   
+```sql
+select explode(array[1,2,3,4]) as id from table_name;
+
+-- 需要join name就需要使用 lateral view
+select name, sub
+from table_name 
+lateral view explode(suboridinates) subView as sub   -- 其中subView是指定的视图别名，sub是新列的别名
+where name is not null;
+```
+* UDF的java实现：
+```java
+public class MyUdf extends UDF{
+    @Override
+    public String evaluate(int xxx ...) { // 可以方法是可以各种重载的，需要保证的是返回值需要是hive可以序列化的数据类型
+
+    }
+}
+
+// 使用前需要先把jar包加入到类路径下，然后引入, 下面的语句是在hive的客户端中执行的
+add jar /usr/myspace/a.jar;
+create temporary function myudf as 'org.my.package.MyUdf';
+// 也可以删除function
+drop temporary function if exists myudf ;
+```
+
+
+
+
+
+
 
 
 
